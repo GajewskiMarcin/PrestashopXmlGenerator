@@ -8,7 +8,6 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-// WAŻNE: jawne wczytanie modelu, aby AdminController znał $definition['primary']
 require_once _PS_MODULE_DIR_ . 'mgxmlfeeds/classes/MgXmlFeed.php';
 
 class AdminMgXmlFeedsController extends ModuleAdminController
@@ -17,18 +16,11 @@ class AdminMgXmlFeedsController extends ModuleAdminController
     {
         $this->bootstrap = true;
 
-        // tabela i klasa modelu
         $this->table = 'mgxmlfeed';
         $this->className = 'MgXmlFeed';
-
-        // KLUCZ GŁÓWNY – ustawiamy jawnie, by nie użyło "id_mgxmlfeed"
         $this->identifier = 'id_feed';
-
-        // HelperList: zdefiniuj sortowanie
         $this->_defaultOrderBy = 'id_feed';
         $this->_defaultOrderWay = 'DESC';
-
-        // Przy explicitSelect = true AdminController wybierze tylko pola z fields_list
         $this->explicitSelect = true;
 
         $this->lang = false;
@@ -165,15 +157,10 @@ class AdminMgXmlFeedsController extends ModuleAdminController
                 </a>';
     }
 
-    /** Pobranie rekordu (do akcji wiersza) */
+    /** Pobranie rekordu (do akcji wiersza) — PROSTY SQL, by uniknąć problemów składniowych */
     protected function getFeedRow($idFeed)
     {
-        $sql = (new DbQuery())
-            ->select('*')
-            ->from('mgxmlfeed', 'a')
-            ->where('a.id_feed = ' . (int)$idFeed)
-            ->limit(1);
-
+        $sql = 'SELECT * FROM ' . _DB_PREFIX_ . 'mgxmlfeed WHERE id_feed = ' . (int)$idFeed . ' LIMIT 1';
         return Db::getInstance(_PS_USE_SQL_SLAVE_)->getRow($sql);
     }
 
@@ -184,7 +171,6 @@ class AdminMgXmlFeedsController extends ModuleAdminController
             return '';
         }
 
-        // domyślny token, gdy nowy rekord
         if (empty($obj->cron_token)) {
             $obj->cron_token = $this->generateToken(40);
         }
@@ -312,7 +298,6 @@ class AdminMgXmlFeedsController extends ModuleAdminController
             ],
         ];
 
-        // Wartości dodatkowe (free fields)
         $feedId = (int)$obj->id;
         $cronToken = (string)$obj->cron_token;
         $masterToken = Configuration::get(Mgxmlfeeds::CONFIG_MASTER_TOKEN);
@@ -333,7 +318,6 @@ class AdminMgXmlFeedsController extends ModuleAdminController
             'cron_url_all'   => '<div class="well">' . htmlspecialchars($cronAllUrl) . '</div>',
         ];
 
-        // Przyciski pomocnicze: regeneracja tokenu, generuj teraz
         $this->toolbar_btn['regen_token'] = [
             'href' => self::$currentIndex . '&regenToken=1&id_feed=' . (int)$feedId . '&token=' . $this->token,
             'desc' => $this->l('Regenerate token'),
@@ -352,7 +336,6 @@ class AdminMgXmlFeedsController extends ModuleAdminController
     /** Obsługa przycisków i zapisów */
     public function postProcess()
     {
-        // Regeneracja tokenu
         if (Tools::isSubmit('regenToken')) {
             $id = (int)Tools::getValue('id_feed');
             if ($id > 0) {
@@ -364,19 +347,16 @@ class AdminMgXmlFeedsController extends ModuleAdminController
             }
         }
 
-        // Walidacja JSON-ów przy zapisie
         if (Tools::isSubmit('submitAddmgxmlfeed')) {
             $this->validateJsonField('languages');
             $this->validateJsonField('currencies');
             $this->validateJsonField('filters');
             $this->validateJsonField('field_map');
 
-            // Jeśli nowy, ustaw token jeżeli pusty
             if (!(int)Tools::getValue('id_mgxmlfeed')) {
                 $_POST['cron_token'] = $this->generateToken(40);
             }
 
-            // Wymuś basename
             $fb = trim((string)Tools::getValue('file_basename'));
             if ($fb === '') {
                 $this->errors[] = $this->l('File basename is required.');
@@ -386,7 +366,6 @@ class AdminMgXmlFeedsController extends ModuleAdminController
         parent::postProcess();
     }
 
-    /** Prosta walidacja JSON – pozwala też na puste */
     protected function validateJsonField($name)
     {
         $val = Tools::getValue($name);
@@ -401,7 +380,6 @@ class AdminMgXmlFeedsController extends ModuleAdminController
         return true;
     }
 
-    /** Generator tokenów */
     protected function generateToken($length = 32)
     {
         try {
