@@ -8,17 +8,32 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
+// WAŻNE: jawne wczytanie modelu, aby AdminController znał $definition['primary']
+require_once _PS_MODULE_DIR_ . 'mgxmlfeeds/classes/MgXmlFeed.php';
+
 class AdminMgXmlFeedsController extends ModuleAdminController
 {
     public function __construct()
     {
         $this->bootstrap = true;
+
+        // tabela i klasa modelu
         $this->table = 'mgxmlfeed';
-        $this->className = 'MgXmlFeed'; // klasa modelu (classes/MgXmlFeed.php)
+        $this->className = 'MgXmlFeed';
+
+        // KLUCZ GŁÓWNY – ustawiamy jawnie, by nie użyło "id_mgxmlfeed"
+        $this->identifier = 'id_feed';
+
+        // HelperList: zdefiniuj sortowanie
+        $this->_defaultOrderBy = 'id_feed';
+        $this->_defaultOrderWay = 'DESC';
+
+        // Przy explicitSelect = true AdminController wybierze tylko pola z fields_list
+        $this->explicitSelect = true;
+
         $this->lang = false;
         $this->list_no_link = false;
         $this->allow_export = false;
-        $this->explicitSelect = true;
 
         parent::__construct();
 
@@ -155,8 +170,8 @@ class AdminMgXmlFeedsController extends ModuleAdminController
     {
         $sql = (new DbQuery())
             ->select('*')
-            ->from('mgxmlfeed')
-            ->where('id_feed = ' . (int)$idFeed)
+            ->from('mgxmlfeed', 'a')
+            ->where('a.id_feed = ' . (int)$idFeed)
             ->limit(1);
 
         return Db::getInstance(_PS_USE_SQL_SLAVE_)->getRow($sql);
@@ -313,9 +328,9 @@ class AdminMgXmlFeedsController extends ModuleAdminController
         $cronAllUrl = $this->context->link->getModuleLink('mgxmlfeeds', 'cron', ['all' => 1, 'token' => $masterToken], true);
 
         $this->fields_value = [
-            'cron_url_feed' => '<div class="well">' . htmlspecialchars($cronUrl) . '</div>',
+            'cron_url_feed'  => '<div class="well">' . htmlspecialchars($cronUrl) . '</div>',
             'serve_url_feed' => '<div class="well">' . htmlspecialchars($serveUrl) . '</div>',
-            'cron_url_all' => '<div class="well">' . htmlspecialchars($cronAllUrl) . '</div>',
+            'cron_url_all'   => '<div class="well">' . htmlspecialchars($cronAllUrl) . '</div>',
         ];
 
         // Przyciski pomocnicze: regeneracja tokenu, generuj teraz
@@ -349,7 +364,7 @@ class AdminMgXmlFeedsController extends ModuleAdminController
             }
         }
 
-        // Walidacja podstawowa JSON-ów przy zapisie
+        // Walidacja JSON-ów przy zapisie
         if (Tools::isSubmit('submitAddmgxmlfeed')) {
             $this->validateJsonField('languages');
             $this->validateJsonField('currencies');
