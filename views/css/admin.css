@@ -1,0 +1,154 @@
+/**
+ * views/css/admin.css
+ * Stylizacje panelu BO dla modułu MG XML Feeds
+ */
+
+/* Kontener formularza */
+.mgxml-wrap {
+  position: relative;
+}
+
+/* Well z URL-em do kopiowania */
+.form-group .well {
+  margin: 0;
+  padding: 8px 10px;
+  background: #f8f8f8;
+  border: 1px solid #e3e3e3;
+  color: #333;
+  word-break: break-all;
+}
+
+/* Przycisk Kopiuj obok etykiety */
+.btn-mgxml-copy {
+  margin-left: 8px !important;
+}
+
+/* Małe odstępy w legendzie */
+.panel .panel-heading i.icon-cogs {
+  margin-right: 6px;
+}
+
+/* Tekst pomocy pod polami JSON (spójność z admin.js) */
+.mgxml-json-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #666;
+}
+.mgxml-json-hint.hint-ok { color: #2e7d32; }
+.mgxml-json-hint.hint-err { color: #c62828; font-weight: 600; }
+
+/* Tabela listy feedów – zawężenie kolumn */
+.table .fixed-width-xs { width: 60px; }
+.table .fixed-width-sm { width: 110px; }
+
+/* Badges dla statusów */
+.badge-mgxml {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 12px;
+  border-radius: 3px;
+  color: #fff;
+  vertical-align: middle;
+}
+.badge-mgxml.ok { background: #2e7d32; }
+.badge-mgxml.error { background: #c62828; }
+.badge-mgxml.running { background: #0277bd; }
+.badge-mgxml.skipped { background: #757575; }
+
+/* Sekcja “pliki cache” (jeżeli dodasz listę w BO) */
+.mgxml-files {
+  margin: 10px 0;
+}
+.mgxml-files table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.mgxml-files th,
+.mgxml-files td {
+  border: 1px solid #ececec;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.mgxml-files th {
+  background: #fafafa;
+  text-align: left;
+}
+
+/* Przyciski w toolbarze */
+.page-head .process-icon-key:before { content: "\f084"; }  /* font-awesome key */
+.page-head .process-icon-refresh:before { content: "\f021"; }
+
+/* Uspójnienie textarea JSON */
+textarea#languages,
+textarea#currencies,
+textarea#filters,
+textarea#field_map {
+  font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  font-size: 12px;
+  min-height: 80px;
+  resize: vertical;
+}
+
+/* Drobne wyrównania formularza */
+.form-horizontal .control-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Responsywniejsze etykiety przy wąskim layoucie */
+@media (max-width: 1280px) {
+  .form-horizontal .control-label {
+    display: block;
+  }
+}
+
+/* Podgląd/preview JSON (jeśli dodany jako <pre>) */
+pre.mgxml-preview {
+  background: #222;
+  color: #eee;
+  padding: 10px 12px;
+  border-radius: 4px;
+  overflow: auto;
+  max-height: 400px;
+  font-size: 12px;
+}
+
+/* Sekcje konfiguracji grupowane (opcjonalne klasy w tpl) */
+.mgxml-section {
+  border: 1px solid #eee;
+  border-left: 4px solid #0277bd;
+  padding: 10px 12px;
+  margin: 12px 0;
+  background: #fff;
+}
+.mgxml-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #0277bd;
+}
+
+/* Ostrzeżenia/informacje */
+.mgxml-alert {
+  padding: 8px 10px;
+  border: 1px solid #ffe08a;
+  background: #fff9e6;
+  color: #6b4e00;
+  border-radius: 3px;
+  margin: 8px 0;
+}
+
+/* Mini loader (opcjonalnie używany przez AJAX w BO) */
+.mgxml-loader {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(0,0,0,.1);
+  border-top-color: #0277bd;
+  animation: mgxml-spin 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+@keyframes mgxml-spin {
+  to { transform: rotate(360deg); }
+}

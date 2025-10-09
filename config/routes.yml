@@ -1,0 +1,24 @@
+# config/routes.yml
+# Definicje tras frontowych dla MG XML Feeds
+
+mgxmlfeeds_feed:
+  path: /module/mgxmlfeeds/feed
+  methods: [GET]
+  defaults:
+    _controller: 'mgxmlfeeds:feed'
+    _disable_module_prefix: true
+
+mgxmlfeeds_cron:
+  path: /module/mgxmlfeeds/cron
+  methods: [GET]
+  defaults:
+    _controller: 'mgxmlfeeds:cron'
+    _disable_module_prefix: true
+
+mgxmlfeeds_cron_all:
+  path: /module/mgxmlfeeds/cron-all
+  methods: [GET]
+  defaults:
+    _controller: 'mgxmlfeeds:cron'
+    _disable_module_prefix: true
+    all: true
