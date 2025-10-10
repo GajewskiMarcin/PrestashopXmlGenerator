@@ -173,13 +173,21 @@ class MgxmlfeedsFeedModuleFrontController extends ModuleFrontController
      */
     protected function getFeedRow($idFeed)
     {
-        $sql = (new DbQuery())
-            ->select('*')
-            ->from('mgxmlfeed')
-            ->where('id_feed = ' . (int)$idFeed)
-            ->limit(1);
-
-        return Db::getInstance(_PS_USE_SQL_SLAVE_)->getRow($sql);
+        $id = (int)$idFeed;
+        if ($id <= 0) {
+            return null;
+        }
+        require_once _PS_MODULE_DIR_ . 'mgxmlfeeds/classes/MgXmlFeed.php';
+        $obj = new MgXmlFeed($id);
+        if (!Validate::isLoadedObject($obj)) {
+            return null;
+        }
+        return [
+            'id_feed'       => (int)$obj->id,
+            'active'        => (int)$obj->active,
+            'file_basename' => (string)$obj->file_basename,
+            'cron_token'    => (string)$obj->cron_token,
+        ];
     }
 
     /**

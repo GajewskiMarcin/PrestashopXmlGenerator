@@ -1,7 +1,7 @@
 <?php
 /**
  * controllers/admin/AdminMgXmlFeedsController.php
- * Panel BO do zarządzania feedami: lista, formularz, akcje (generuj, token).
+ * Back Office controller for mgxmlfeeds: list, form, row actions (build, regenerate token).
  */
 
 if (!defined('_PS_VERSION_')) {
@@ -12,50 +12,55 @@ require_once _PS_MODULE_DIR_ . 'mgxmlfeeds/classes/MgXmlFeed.php';
 
 class AdminMgXmlFeedsController extends ModuleAdminController
 {
+    /** @var string Primary key column name for mgxmlfeed table */
+    protected $pk;
+
     public function __construct()
     {
-        $this->bootstrap = true;
+        $this->bootstrap      = true;
+        $this->table          = 'mgxmlfeed';
+        $this->className      = 'MgXmlFeed';
+        $this->lang           = false;
+        $this->allow_export   = false;
+        $this->list_no_link   = false;
+        $this->explicitSelect = false;
 
-        $this->table = 'mgxmlfeed';
-        $this->className = 'MgXmlFeed';
-        $this->identifier = 'id_feed';
-        $this->_defaultOrderBy = 'id_feed';
+        // Determine PK from ObjectModel definition (safer across schema variants)
+        $this->pk = (isset(MgXmlFeed::$definition['primary']) && MgXmlFeed::$definition['primary'])
+            ? (string) MgXmlFeed::$definition['primary']
+            : 'id_feed';
+
+        $this->identifier       = $this->pk;
+        $this->_defaultOrderBy  = $this->pk;
         $this->_defaultOrderWay = 'DESC';
-        $this->explicitSelect = true;
-
-        $this->lang = false;
-        $this->list_no_link = false;
-        $this->allow_export = false;
 
         parent::__construct();
 
-        // Kolumny listy
+        // List columns
         $this->fields_list = [
-            'id_feed' => [
+            $this->pk => [
                 'title' => $this->l('ID'),
                 'align' => 'text-center',
                 'class' => 'fixed-width-xs',
             ],
             'active' => [
-                'title' => $this->l('Active'),
-                'align' => 'text-center',
-                'type' => 'bool',
+                'title'  => $this->l('Active'),
+                'align'  => 'text-center',
+                'type'   => 'bool',
                 'active' => 'status',
-                'orderby' => false,
+                'class'  => 'fixed-width-sm',
             ],
             'name' => [
                 'title' => $this->l('Name'),
-                'filter_key' => 'a!name',
             ],
             'file_basename' => [
                 'title' => $this->l('Basename'),
-                'align' => 'text-left',
             ],
             'variant_mode' => [
-                'title' => $this->l('Mode'),
+                'title'    => $this->l('Mode'),
                 'callback' => 'renderVariantMode',
-                'orderby' => false,
-                'search' => false,
+                'orderby'  => false,
+                'search'   => false,
             ],
             'ttl_minutes' => [
                 'title' => $this->l('TTL (min)'),
@@ -64,107 +69,115 @@ class AdminMgXmlFeedsController extends ModuleAdminController
             ],
             'last_build_at' => [
                 'title' => $this->l('Last build'),
-                'type' => 'datetime',
-            ],
-            'last_status' => [
-                'title' => $this->l('Status'),
+                'type'  => 'datetime',
                 'align' => 'text-center',
-            ],
-            'row_count' => [
-                'title' => $this->l('Rows'),
-                'align' => 'text-center',
-                'class' => 'fixed-width-sm',
-            ],
-            'build_time_ms' => [
-                'title' => $this->l('Time [ms]'),
-                'align' => 'text-center',
-                'class' => 'fixed-width-sm',
             ],
         ];
 
-        // Akcje wiersza
+        // Row actions
         $this->addRowAction('edit');
         $this->addRowAction('delete');
         $this->addRowAction('build');
         $this->addRowAction('token');
 
-        // Akcje masowe
+        // Bulk delete
         $this->bulk_actions = [
             'delete' => [
-                'text' => $this->l('Delete selected'),
+                'text'    => $this->l('Delete selected'),
                 'confirm' => $this->l('Delete selected items?'),
-                'icon' => 'icon-trash',
+                'icon'    => 'icon-trash',
             ],
         ];
     }
 
-    /** Callback listy dla trybu wariantu */
-    public function renderVariantMode($value, $row)
+    public function renderVariantMode($echo, $row)
     {
-        return $value === 'combination' ? $this->l('Per combination') : $this->l('Per product');
+        $mode = isset($row['variant_mode']) ? (string)$row['variant_mode'] : 'product';
+        return $mode === 'combination' ? $this->l('Per combination') : $this->l('Per product');
     }
 
-    /** Nagłówek z przyciskami */
-    public function initPageHeaderToolbar()
+    public function renderList()
     {
-        parent::initPageHeaderToolbar();
-
-        $this->page_header_toolbar_btn['new_feed'] = [
-            'href' => self::$currentIndex . '&addmgxmlfeed&token=' . $this->token,
-            'desc' => $this->l('Add feed'),
-            'icon' => 'process-icon-new',
+        // Add "new" button
+        $this->toolbar_btn['new'] = [
+            'href' => self::$currentIndex.'&add'.$this->table.'&token='.$this->token,
+            'desc' => $this->l('Add new feed'),
         ];
 
-        $masterToken = Configuration::get(Mgxmlfeeds::CONFIG_MASTER_TOKEN);
-        $cronAllUrl = $this->context->link->getModuleLink(
-            'mgxmlfeeds',
-            'cron',
-            ['all' => 1, 'token' => $masterToken],
-            true
-        );
+        // Header button - run CRON for all feeds (uses master token)
+        $this->initToolbar();
+        $this->addHeaderToolbarBtn();
+
+        return parent::renderList();
+    }
+
+    protected function addHeaderToolbarBtn()
+    {
+        $master = Configuration::get('MGXMLFEEDS_MASTER_TOKEN');
+        $cronAllUrl = $this->context->link->getModuleLink('mgxmlfeeds', 'cron', ['all' => 1, 'token' => $master], true);
 
         $this->page_header_toolbar_btn['cron_all'] = [
-            'href' => $cronAllUrl,
-            'desc' => $this->l('Run CRON (all)'),
-            'icon' => 'process-icon-refresh',
+            'href'   => $cronAllUrl,
+            'desc'   => $this->l('Run CRON (all)'),
+            'icon'   => 'process-icon-refresh',
             'target' => '_blank',
         ];
     }
 
-    /** Przyciski akcji wiersza */
+    /** Row action: build feed now */
     public function displayBuildLink($token, $id)
     {
-        $feed = $this->getFeedRow((int)$id);
-        if (!$feed) {
+$id = (int)$id;
+        if ($id <= 0) {
             return '';
         }
+
+        $feed = new MgXmlFeed($id);
+        if (!Validate::isLoadedObject($feed) || empty($feed->cron_token)) {
+            return '';
+        }
+
         $url = $this->context->link->getModuleLink(
             'mgxmlfeeds',
             'cron',
-            ['id' => (int)$id, 'token' => $feed['cron_token']],
+            ['id' => (int)$feed->id, 'token' => (string)$feed->cron_token],
             true
         );
-        return '<a class="btn btn-default" target="_blank" href="' . htmlspecialchars($url) . '">
+
+        return '<a class="btn btn-default" target="_blank" href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">
                     <i class="icon-refresh"></i> ' . $this->l('Build') . '
                 </a>';
-    }
+}
 
+    /** Row action: regenerate token */
     public function displayTokenLink($token, $id)
     {
-        $regenUrl = self::$currentIndex . '&regenToken=1&id_feed=' . (int)$id . '&token=' . $this->token;
-        return '<a class="btn btn-default" href="' . htmlspecialchars($regenUrl) . '">
+        $id = (int)$id;
+        if ($id <= 0) {
+            return '';
+        }
+
+        $regenUrl = self::$currentIndex . '&regenToken=1&' . $this->identifier . '=' . $id . '&token=' . $this->token;
+
+        return '<a class="btn btn-default" href="' . htmlspecialchars($regenUrl, ENT_QUOTES, 'UTF-8') . '">
                     <i class="icon-key"></i> ' . $this->l('Regenerate token') . '
                 </a>';
     }
 
-    /** Pobranie rekordu (do akcji wiersza) — PROSTY SQL, by uniknąć problemów składniowych */
-    protected function getFeedRow($idFeed)
+    /** Safe single row fetch by PK (prevents '... WHERE =  LIMIT 1') */
+    protected function getFeedRow($idValue)
     {
-        $sql = 'SELECT * FROM ' . _DB_PREFIX_ . 'mgxmlfeed WHERE id_feed = ' . (int)$idFeed . ' LIMIT 1';
-        return Db::getInstance(_PS_USE_SQL_SLAVE_)->getRow($sql);
+        $id = (int)$idValue;
+        if ($id <= 0) {
+            return null;
+        }
+        $pk = $this->identifier ?: $this->pk ?: 'id_feed';
+        $sql = 'SELECT * FROM `' . _DB_PREFIX_ . 'mgxmlfeed` WHERE `' . bqSQL($pk) . '` = ' . $id . ' LIMIT 1';
+        $row = Db::getInstance(_PS_USE_SQL_SLAVE_)->getRow($sql);
+        return $row ?: null;
     }
 
-    /** Formularz edycji/dodawania */
+    /** Add/Edit form */
     public function renderForm()
     {
         if (!($obj = $this->loadObject(true))) {
@@ -176,121 +189,96 @@ class AdminMgXmlFeedsController extends ModuleAdminController
         }
 
         $variantOptions = [
-            ['id' => 'product', 'name' => $this->l('Per product')],
+            ['id' => 'product',     'name' => $this->l('Per product')],
             ['id' => 'combination', 'name' => $this->l('Per combination')],
         ];
 
         $this->fields_form = [
             'legend' => [
                 'title' => $this->l('Feed configuration'),
-                'icon' => 'icon-cogs',
             ],
             'input' => [
                 [
-                    'type' => 'text',
-                    'label' => $this->l('Name'),
-                    'name'  => 'name',
-                    'required' => true,
-                    'col' => 6,
-                ],
-                [
-                    'type' => 'switch',
-                    'label' => $this->l('Active'),
-                    'name' => 'active',
-                    'is_bool' => true,
+                    'type'   => 'switch',
+                    'label'  => $this->l('Active'),
+                    'name'   => 'active',
+                    'is_bool'=> true,
                     'values' => [
-                        ['id' => 'active_on', 'value' => 1, 'label' => $this->l('Enabled')],
+                        ['id' => 'active_on',  'value' => 1, 'label' => $this->l('Enabled')],
                         ['id' => 'active_off', 'value' => 0, 'label' => $this->l('Disabled')],
                     ],
                 ],
                 [
-                    'type' => 'text',
+                    'type'  => 'text',
                     'label' => $this->l('File basename'),
-                    'name' => 'file_basename',
-                    'col'  => 4,
-                    'hint' => $this->l('Used in filename: {basename}-{lang}-{shop}.xml'),
+                    'name'  => 'file_basename',
+                    'col'   => 4,
+                    'hint'  => $this->l('Used in filename: {basename}-{lang}-{shop}.xml'),
                 ],
                 [
-                    'type' => 'select',
-                    'label' => $this->l('Variant mode'),
-                    'name' => 'variant_mode',
+                    'type'  => 'text',
+                    'label' => $this->l('Name (internal)'),
+                    'name'  => 'name',
+                    'col'   => 6,
+                ],
+                [
+                    'type'    => 'select',
+                    'label'   => $this->l('Variant mode'),
+                    'name'    => 'variant_mode',
                     'options' => [
                         'query' => $variantOptions,
-                        'id' => 'id',
-                        'name' => 'name',
+                        'id'    => 'id',
+                        'name'  => 'name',
                     ],
+                    'hint' => $this->l('Per product or per combination row mode'),
                 ],
                 [
-                    'type' => 'switch',
-                    'label' => $this->l('GZIP'),
-                    'name' => 'gzip',
-                    'is_bool' => true,
-                    'values' => [
-                        ['id' => 'gzip_on', 'value' => 1, 'label' => $this->l('Yes')],
-                        ['id' => 'gzip_off', 'value' => 0, 'label' => $this->l('No')],
-                    ],
-                ],
-                [
-                    'type' => 'text',
-                    'label' => $this->l('TTL (minutes)'),
-                    'name' => 'ttl_minutes',
-                    'col'  => 2,
-                    'hint' => $this->l('Controls cache headers / freshness.'),
-                ],
-                [
-                    'type' => 'textarea',
+                    'type'  => 'text',
                     'label' => $this->l('Languages (JSON)'),
-                    'name' => 'languages',
-                    'cols' => 60,
-                    'rows' => 2,
-                    'desc' => $this->l('Example: ["pl","en"]. Leave empty to use shop default.'),
+                    'name'  => 'languages',
+                    'desc'  => $this->l('Example: ["pl","en"]'),
+                    'col'   => 8,
+                    'class' => 'fixed-font',
                 ],
                 [
-                    'type' => 'textarea',
+                    'type'  => 'text',
                     'label' => $this->l('Currencies (JSON)'),
-                    'name' => 'currencies',
-                    'cols' => 60,
-                    'rows' => 2,
-                    'desc' => $this->l('Example: ["PLN","EUR"]. Leave empty to use shop default.'),
+                    'name'  => 'currencies',
+                    'desc'  => $this->l('Example: ["PLN","EUR"]'),
+                    'col'   => 8,
+                    'class' => 'fixed-font',
                 ],
                 [
-                    'type' => 'textarea',
+                    'type'  => 'textarea',
                     'label' => $this->l('Filters (JSON)'),
-                    'name' => 'filters',
-                    'cols' => 60,
-                    'rows' => 6,
-                    'desc' => $this->l('Example: {"categories":[44,51],"manufacturers":[3,5],"only_active":true}'),
+                    'name'  => 'filters',
+                    'rows'  => 4,
+                    'col'   => 8,
+                    'desc'  => $this->l('Example: {"categories":[2,3], "manufacturers":[1], "only_active":true, "only_available":true, "min_price":0, "max_price":null}'),
+                    'class' => 'fixed-font',
                 ],
                 [
-                    'type' => 'textarea',
-                    'label' => $this->l('Field map / aliases (JSON)'),
-                    'name' => 'field_map',
-                    'cols' => 60,
-                    'rows' => 6,
-                    'desc' => $this->l('Enable/disable fields and set aliases. Example: {"price_tax_incl":"price_brutto","ean13":true}'),
+                    'type'  => 'textarea',
+                    'label' => $this->l('Field map (JSON)'),
+                    'name'  => 'field_map',
+                    'rows'  => 5,
+                    'col'   => 8,
+                    'desc'  => $this->l('Example: {"name":true, "description":"opis", "ean13":true, "reference":"sku"}'),
+                    'class' => 'fixed-font',
                 ],
                 [
-                    'type' => 'text',
+                    'type'  => 'text',
+                    'label' => $this->l('TTL (minutes)'),
+                    'name'  => 'ttl_minutes',
+                    'col'   => 2,
+                    'hint'  => $this->l('Cache time-to-live for generated file'),
+                ],
+                [
+                    'type'  => 'text',
                     'label' => $this->l('CRON token'),
-                    'name' => 'cron_token',
-                    'col'  => 6,
-                    'hint' => $this->l('Security token for cron trigger (unique per feed).'),
-                    'readonly' => true,
-                ],
-                [
-                    'type' => 'free',
-                    'label' => $this->l('CRON URL (this feed)'),
-                    'name'  => 'cron_url_feed',
-                ],
-                [
-                    'type' => 'free',
-                    'label' => $this->l('Feed URL (serve cached file)'),
-                    'name'  => 'serve_url_feed',
-                ],
-                [
-                    'type' => 'free',
-                    'label' => $this->l('CRON URL (all feeds)'),
-                    'name'  => 'cron_url_all',
+                    'name'  => 'cron_token',
+                    'col'   => 6,
+                    'hint'  => $this->l('Used to protect CRON/build endpoint'),
                 ],
             ],
             'submit' => [
@@ -298,86 +286,62 @@ class AdminMgXmlFeedsController extends ModuleAdminController
             ],
         ];
 
-        $feedId = (int)$obj->id;
-        $cronToken = (string)$obj->cron_token;
-        $masterToken = Configuration::get(Mgxmlfeeds::CONFIG_MASTER_TOKEN);
-
-        $cronUrl = $feedId > 0 && $cronToken
-            ? $this->context->link->getModuleLink('mgxmlfeeds', 'cron', ['id' => $feedId, 'token' => $cronToken], true)
-            : $this->l('Save first to generate token');
-
-        $serveUrl = $feedId > 0
-            ? $this->context->link->getModuleLink('mgxmlfeeds', 'feed', ['id' => $feedId], true)
-            : $this->l('Save first to get URL');
-
-        $cronAllUrl = $this->context->link->getModuleLink('mgxmlfeeds', 'cron', ['all' => 1, 'token' => $masterToken], true);
-
         $this->fields_value = [
-            'cron_url_feed'  => '<div class="well">' . htmlspecialchars($cronUrl) . '</div>',
-            'serve_url_feed' => '<div class="well">' . htmlspecialchars($serveUrl) . '</div>',
-            'cron_url_all'   => '<div class="well">' . htmlspecialchars($cronAllUrl) . '</div>',
-        ];
-
-        $this->toolbar_btn['regen_token'] = [
-            'href' => self::$currentIndex . '&regenToken=1&id_feed=' . (int)$feedId . '&token=' . $this->token,
-            'desc' => $this->l('Regenerate token'),
-            'icon' => 'process-icon-key',
-        ];
-        $this->toolbar_btn['build_now'] = [
-            'href' => $feedId > 0 ? $cronUrl : '#',
-            'desc' => $this->l('Build now'),
-            'icon' => 'process-icon-refresh',
-            'target' => '_blank',
+            'active'        => (int)$obj->active,
+            'name'          => (string)$obj->name,
+            'file_basename' => (string)$obj->file_basename,
+            'variant_mode'  => (string)$obj->variant_mode ?: 'product',
+            'languages'     => (string)$obj->languages,
+            'currencies'    => (string)$obj->currencies,
+            'filters'       => (string)$obj->filters,
+            'field_map'     => (string)$obj->field_map,
+            'ttl_minutes'   => (int)$obj->ttl_minutes,
+            'cron_token'    => (string)$obj->cron_token,
         ];
 
         return parent::renderForm();
     }
 
-    /** Obsługa przycisków i zapisów */
     public function postProcess()
     {
+        // Regenerate token
         if (Tools::isSubmit('regenToken')) {
-            $id = (int)Tools::getValue('id_feed');
+            $id = (int)Tools::getValue($this->identifier);
             if ($id > 0) {
-                $new = $this->generateToken(40);
-                Db::getInstance()->update('mgxmlfeed', ['cron_token' => pSQL($new)], 'id_feed = ' . (int)$id);
-                $this->confirmations[] = $this->l('Token regenerated.');
-            } else {
-                $this->errors[] = $this->l('Invalid feed ID.');
+                $feed = new MgXmlFeed($id);
+                if (Validate::isLoadedObject($feed)) {
+                    $feed->cron_token = $this->generateToken(40);
+                    $feed->save();
+                    $this->confirmations[] = $this->l('Token regenerated');
+                } else {
+                    $this->errors[] = $this->l('Feed not found');
+                }
             }
         }
 
-        if (Tools::isSubmit('submitAddmgxmlfeed')) {
-            $this->validateJsonField('languages');
-            $this->validateJsonField('currencies');
-            $this->validateJsonField('filters');
-            $this->validateJsonField('field_map');
-
-            if (!(int)Tools::getValue('id_mgxmlfeed')) {
-                $_POST['cron_token'] = $this->generateToken(40);
+        // Defensive JSON validation (until we add click-based UI)
+if (Tools::isSubmit('submitAdd'.$this->table)) {
+            foreach (['languages', 'currencies', 'filters', 'field_map'] as $name) {
+            $val = Tools::getValue($name);
+            if ($val === '' || $val === null) {
+                continue;
             }
-
-            $fb = trim((string)Tools::getValue('file_basename'));
-            if ($fb === '') {
-                $this->errors[] = $this->l('File basename is required.');
+            if (!$this->isJson($val)) {
+                $this->errors[] = sprintf($this->l('Invalid JSON in field: %s'), $name);
             }
+        }
         }
 
         parent::postProcess();
     }
 
-    protected function validateJsonField($name)
+    protected function isJson($string)
     {
-        $val = Tools::getValue($name);
-        if ($val === '' || $val === null) {
-            return true;
-        }
-        json_decode($val, true);
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $this->errors[] = sprintf($this->l('Invalid JSON in field: %s'), $name);
+        if (!is_string($string)) {
             return false;
         }
-        return true;
+        json_decode($string, true);
+        return json_last_error() === JSON_ERROR_NONE;
     }
 
     protected function generateToken($length = 32)
