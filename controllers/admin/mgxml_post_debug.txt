@@ -1,0 +1,66 @@
+Array
+(
+    [id_feed] => 6
+    [submitAddmgxmlfeed] => 1
+    [name] => test6
+    [file_basename] => test6
+    [filters_include_children] => 0
+    [filters_manufacturers] => Array
+        (
+            [0] => 12
+        )
+
+    [filters_only_active] => 1
+    [filters_only_available] => 0
+    [filters_min_price] => 
+    [filters_max_price] => 
+    [languages_select] => Array
+        (
+            [0] => pl
+        )
+
+    [currencies_select] => Array
+        (
+            [0] => 1
+        )
+
+    [filters_json] => {"categories":[0],"include_children":0,"manufacturers":[12],"only_active":1,"only_available":0,"min_price":null,"max_price":null}
+    [languages_json] => ["pl"]
+    [currencies_json] => ["PLN"]
+    [field_map_json] => []
+)
+Array
+(
+    [id_feed] => 6
+    [submitAddmgxmlfeed] => 1
+    [name] => test6
+    [file_basename] => test6
+    [filters_include_children] => 0
+    [filters_manufacturers] => Array
+        (
+            [0] => 12
+        )
+
+    [filters_only_active] => 1
+    [filters_only_available] => 0
+    [filters_min_price] => 
+    [filters_max_price] => 
+    [languages_select] => Array
+        (
+            [0] => pl
+        )
+
+    [currencies_select] => Array
+        (
+            [0] => 1
+        )
+
+    [filters_json] => {"categories":[0],"include_children":0,"manufacturers":[12],"only_active":1,"only_available":0,"min_price":null,"max_price":null}
+    [languages_json] => ["pl"]
+    [currencies_json] => ["PLN"]
+    [field_map_json] => []
+    [filters] => {"categories":[0],"include_children":0,"manufacturers":[12],"only_active":1,"only_available":0,"min_price":null,"max_price":null}
+    [currencies] => ["PLN"]
+    [languages] => ["pl"]
+    [field_map] => []
+)

@@ -596,6 +596,14 @@ class AdminMgXmlFeedsController extends ModuleAdminController
         return parent::processSave();
     }
 
+    public function processUpdate()
+    {
+        // Zapewniamy, że przed update'em złożone zostaną JSONy z formularza
+        $this->composeJsonFromPostedUi();
+
+        return parent::processUpdate();
+    }
+
     /* === POMOCNICZE === */
     protected function jsonDecodeSafe($json, $default)
     {
@@ -617,19 +625,21 @@ class AdminMgXmlFeedsController extends ModuleAdminController
         ];
     }
 
-    protected function renderLangCheckboxesHtml(array $langRows)
+    protected function renderLangCheckboxesHtml(array $rows)
     {
         $out = '<div class="well">';
-        foreach ($langRows as $row) {
-            $id = 'lang_'.$row['id'];
-            $checked = $row['checked'] ? 'checked' : '';
+        foreach ($rows as $r) {
+            $id = 'lang_'.$r['id'];
+            $checked = !empty($r['checked']) ? 'checked' : '';
+            // NAJWAŻNIEJSZE: name="languages_select[]" i value=ISO
             $out .= '<label class="checkbox" style="display:block">'
-                .'<input type="checkbox" class="js-mg-lang" data-iso="'.pSQL($row['iso']).'" id="'.$id.'" '.$checked.'> '
-                .htmlspecialchars($row['name']).'</label>';
+                . '<input type="checkbox" name="languages_select[]" value="'.htmlspecialchars($r['iso'], ENT_QUOTES, 'UTF-8').'" id="'.$id.'" '.$checked.'> '
+                . htmlspecialchars($r['name'], ENT_QUOTES, 'UTF-8')
+                . '</label>';
         }
-        $out .= '</div>';
-        return $out;
+        return $out.'</div>';
     }
+
 
     protected function renderFieldMapTableHtml(array $rows)
     {
@@ -732,19 +742,118 @@ JS;
         return $js;
     }
 
+    private function jsonOrNull($s)
+    {
+        if (!is_string($s)) return null;
+        $s = trim($s);
+        if ($s === '' || $s === '[]' || $s === '{}') return null; // traktuj jako „puste”
+        $d = json_decode($s, true);
+        return (json_last_error() === JSON_ERROR_NONE && !empty($d)) ? $d : null;
+    }
+
     protected function composeJsonFromPostedUi()
     {
-        // Jeśli hiddeny są wypełnione, przepisz je na nazwy pól ObjectModel
-        $filtersJson    = Tools::getValue('filters_json');
-        $languagesJson  = Tools::getValue('languages_json');
-        $currenciesJson = Tools::getValue('currencies_json');
-        $fieldMapJson   = Tools::getValue('field_map_json');
+        @file_put_contents(_PS_ROOT_DIR_.'/var/logs/mgxml_post_debug.txt', print_r($_POST, true), FILE_APPEND);
+        $idFeed   = (int)Tools::getValue($this->identifier);
+        $existing = ($idFeed > 0) ? new MgXmlFeed($idFeed) : null;
+        if ($existing && !Validate::isLoadedObject($existing)) { $existing = null; }
 
-        if ($filtersJson !== null)    { $_POST['filters']    = $filtersJson; }
-        if ($languagesJson !== null)  { $_POST['languages']  = $languagesJson; }
-        if ($currenciesJson !== null) { $_POST['currencies'] = $currenciesJson; }
-        if ($fieldMapJson !== null)   { $_POST['field_map']  = $fieldMapJson; }
+        $enc = function($a){ return json_encode($a, JSON_UNESCAPED_UNICODE); };
+
+        // ===== 1) ZBIÓR Z KONTROLEK UI (to ma najwyższy priorytet) =====
+        // Kategorie (HelperTree): categoryBox[]
+        $cat = Tools::getValue('categoryBox');
+        if ($cat === null) $cat = Tools::getValue('categoryBox[]');
+
+        // Producenci (select multiple): filters_manufacturers[]
+        $mans = Tools::getValue('filters_manufacturers');
+        if ($mans === null) $mans = Tools::getValue('filters_manufacturers[]');
+
+        $min = Tools::getValue('filters_min_price');
+        $max = Tools::getValue('filters_max_price');
+
+        $ctrlFilters = [
+            'categories'       => array_map('intval', (array)$cat),
+            'include_children' => (int)Tools::getValue('filters_include_children'),
+            'manufacturers'    => array_map('intval', (array)$mans),
+            'only_active'      => (int)Tools::getValue('filters_only_active'),
+            'only_available'   => (int)Tools::getValue('filters_only_available'),
+            'min_price'        => ($min === '' ? null : (float)$min),
+            'max_price'        => ($max === '' ? null : (float)$max),
+        ];
+        $ctrlFiltersNonEmpty =
+            !empty($ctrlFilters['categories']) ||
+            !empty($ctrlFilters['manufacturers']) ||
+            !empty($ctrlFilters['only_active']) ||
+            !empty($ctrlFilters['only_available']) ||
+            $ctrlFilters['min_price'] !== null ||
+            $ctrlFilters['max_price'] !== null ||
+            !empty($ctrlFilters['include_children']);
+
+        // Waluty (select multiple): currencies_select[]
+        $currSel = Tools::getValue('currencies_select');
+        if ($currSel === null) $currSel = Tools::getValue('currencies_select[]');
+        $currSel = array_map('intval', (array)$currSel);
+        $currIso = [];
+        foreach ($currSel as $idc) {
+            $cur = Currency::getCurrency((int)$idc); // array
+            if (!empty($cur['iso_code'])) $currIso[] = (string)$cur['iso_code'];
+        }
+        $currIso = array_values(array_unique($currIso));
+
+        // Języki (checkboxy): languages_select[]  ← UWAGA: checkboxy MUSZĄ mieć name="languages_select[]"
+        $langSel = Tools::getValue('languages_select');
+        if ($langSel === null) $langSel = Tools::getValue('languages_select[]');
+        $langSel = is_array($langSel) ? array_values(array_unique(array_map('strval', $langSel))) : [];
+
+        // ===== 2) HIDDEN JSONY – traktuj puste []/{} jako „brak” =====
+        $filtersJsonArr    = $this->jsonOrNull(Tools::getValue('filters_json'));
+        $languagesJsonArr  = $this->jsonOrNull(Tools::getValue('languages_json'));
+        $currenciesJsonArr = $this->jsonOrNull(Tools::getValue('currencies_json'));
+        $fieldMapJsonArr   = $this->jsonOrNull(Tools::getValue('field_map_json'));
+
+        // ===== 3) PRIORYTETY ZAPISU =====
+        // FILTERS: kontrolki UI > niepusty hidden > DB > domyślny obiekt
+        if ($ctrlFiltersNonEmpty) {
+            $_POST['filters'] = $enc($ctrlFilters);
+        } elseif (is_array($filtersJsonArr)) {
+            $_POST['filters'] = $enc($filtersJsonArr);
+        } elseif ($existing && !empty($existing->filters)) {
+            $_POST['filters'] = $existing->filters;
+        } else {
+            $_POST['filters'] = $enc([
+                'categories'=>[], 'include_children'=>0, 'manufacturers'=>[],
+                'only_active'=>0, 'only_available'=>0, 'min_price'=>null, 'max_price'=>null
+            ]);
+        }
+
+        // CURRENCIES: z selecta (ISO) > niepusty hidden > DB > brak
+        if (!empty($currIso)) {
+            $_POST['currencies'] = $enc($currIso);
+        } elseif (is_array($currenciesJsonArr)) {
+            $_POST['currencies'] = $enc($currenciesJsonArr);
+        } elseif ($existing && !empty($existing->currencies)) {
+            $_POST['currencies'] = $existing->currencies;
+        }
+
+        // LANGUAGES: z checkboxów > niepusty hidden > DB > brak
+        if (!empty($langSel)) {
+            $_POST['languages'] = $enc($langSel);
+        } elseif (is_array($languagesJsonArr)) {
+            $_POST['languages'] = $enc($languagesJsonArr);
+        } elseif ($existing && !empty($existing->languages)) {
+            $_POST['languages'] = $existing->languages;
+        }
+
+        // FIELD MAP: niepusty hidden > DB (UI robi tabelkę, więc tu nie ma kontrolek)
+        if (is_array($fieldMapJsonArr)) {
+            $_POST['field_map'] = $enc($fieldMapJsonArr);
+        } elseif ($existing && !empty($existing->field_map)) {
+            $_POST['field_map'] = $existing->field_map;
+        }
     }
+
+
 
     /**
      * Wspólny builder – najpierw klasa produkcyjna, potem fallback: CRON (HTTP) i na końcu lokalny include.
