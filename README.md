@@ -1,151 +1,149 @@
-# MG XML Feeds
+# 🧩 MG XML Feeds
 
-**Moduł dla PrestaShop 8–9**, który umożliwia generowanie wielu plików XML z produktami sklepu – do wykorzystania w integracjach, blogach WordPress, aplikacjach zewnętrznych lub systemach partnerskich.
-
----
-
-## 📦 Funkcjonalność
-
-- Generowanie **wielu niezależnych feedów XML** z produktami (każdy z własnymi filtrami i ustawieniami).
-- Obsługa:
-  - nazw, opisów, kategorii, producenta, zdjęć, cech, cen netto/brutto,
-  - wag, wymiarów, indeksów, EAN, MPN, ISBN, linków produktowych,
-  - wariantów (tryb *per product* / *per combination*),
-  - multi-shop i multi-lang.
-- Automatyczne generowanie i aktualizacja plików XML przez **CRON URL**.
-- Kompresja GZIP (`.xml.gz`).
-- Etykiety `ETag` i `Last-Modified` – dla szybszego cache przeglądarek i serwerów proxy.
-- Logowanie przebiegów i błędów generacji.
-- Możliwość konfiguracji:
-  - filtrowania po kategoriach i producentach,
-  - TTL (czas ważności cache),
-  - własnych mapowań pól (JSON),
-  - języków i walut (JSON).
+**Moduł dla PrestaShop 8–9**, służący do tworzenia, konfigurowania i generowania wielu niezależnych feedów XML z produktami sklepu.  
+Umożliwia przygotowanie plików XML do integracji z zewnętrznymi systemami (np. Ceneo, Google Merchant, Allegro), blogami, portalami lub aplikacjami partnerskimi.
 
 ---
 
-## ⚙️ Instalacja
+## 📦 Zakres funkcjonalny
 
-1. Skopiuj folder `mgxmlfeeds` do katalogu `/modules/` w instalacji PrestaShop.
-2. W panelu administracyjnym wejdź w:
-   **Moduły → Menedżer modułów → Zainstaluj moduł → Wybierz paczkę ZIP**.
-3. Po instalacji znajdziesz nową sekcję:
-   - **Konfiguracja** (token główny CRON, logi),
-   - **XML Feeds** (lista feedów, przyciski „Edytuj”, „Generuj”).
+- Tworzenie **dowolnej liczby feedów XML** z indywidualnymi ustawieniami.
+- Konfiguracja obejmuje:
+  - nazwy feedów i nazwy plików (`file_basename`),
+  - filtry produktów (kategorie, producenci, aktywność, dostępność, ceny min/max),
+  - wybór języków i walut,
+  - mapowanie pól (definicja, które dane mają znaleźć się w XML),
+  - automatycznie generowane tokeny: **feed_token** i **cron_token**.
+- Generowanie XML:
+  - ręcznie (przycisk **Build**),
+  - automatycznie przez CRON (token URL).
+- Kompresja `.xml.gz`, obsługa nagłówków `ETag` i `Last-Modified`.
+- Logowanie wszystkich procesów generacji.
+- Wsparcie dla multi-shop, multi-lang i multi-currency.
 
 ---
 
-## 🧩 Struktura katalogów
+## ⚙️ Aktualny stan (2025-10)
 
+- Panel administracyjny działa i zapisuje dane feedów do bazy.
+- Pola JSON (`filters`, `languages`, `currencies`, `field_map`) są częściowo poprawnie składane.
+- Generacja plików XML działa poprawnie (w tym CRON i ścieżki cache).
+- Formularz edycji feeda działa, lecz wymaga dopracowania w zakresie:
+  - zapisywania wszystkich pól konfiguracyjnych,
+  - odtwarzania ustawień przy ponownym otwarciu feeda,
+  - podglądu i kopiowania linków feeda / crona.
+
+---
+
+## 🧱 Struktura katalogów
+
+```
 mgxmlfeeds/
 ├── classes/
-│ ├── Dto/ # Obiekty DTO (ProductDto, FeatureDto)
-│ ├── Helper/ # Pomocnicze klasy: XmlWriter, ProductQuery, Cron, File
-│ ├── MgXmlFeed.php # Model bazy danych
-│ ├── MgXmlFeedLog.php # Model logów
+│   ├── Dto/                 # Obiekty DTO (ProductDto, FeatureDto)
+│   ├── Helper/              # Pomocnicze klasy: XmlWriter, ProductQuery, Cron, File
+│   ├── MgXmlFeed.php        # Model bazy danych
+│   ├── MgXmlFeedLog.php     # Model logów generacji
 │
 ├── src/
-│ ├── Exporter/FeedExporter.php # Główna logika generacji XML
-│ ├── Service/FeedBuilderService.php
+│   ├── Exporter/FeedExporter.php      # Główna logika generacji XML
+│   ├── Service/FeedBuilderService.php # Budowanie danych z bazy
 │
 ├── controllers/
-│ ├── admin/AdminMgXmlFeedsController.php
-│ ├── front/feed.php # Serwowanie i podgląd XML
-│ ├── front/cron.php # Wywołanie CRON
-│
-├── translations/pl.php
+│   ├── admin/AdminMgXmlFeedsController.php # Formularz i panel w BO
+│   ├── front/feed.php                     # Serwowanie i podgląd XML
+│   ├── front/cron.php                     # Obsługa CRON
 │
 ├── views/
-│ ├── css/admin.css
-│ ├── js/admin.js
-│ ├── templates/
-│ ├── admin/
-│ │ ├── configure.tpl
-│ │ └── list.tpl
-│ └── hook/
-│ └── feed.tpl
+│   ├── js/admin.js               # Logika UI i JSON-ów
+│   ├── css/admin.css
+│   └── templates/admin/
+│       ├── configure.tpl
+│       └── list.tpl
 │
 ├── var/
-│ ├── cache/ # miejsce generowania plików XML
-│ └── logs/ # logi generacji feedów
+│   ├── cache/   # pliki XML
+│   └── logs/    # logi generacji
 │
-├── index.php # plik ochronny
-└── mgxmlfeeds.php # główny plik modułu
-
+├── mgxmlfeeds.php  # główny plik modułu
+└── index.php       # plik ochronny
+```
 
 ---
 
-## 🧠 CRON i aktualizacje
+## 🧠 CRON i feedy
 
-Każdy feed ma własny **token CRON**, np.:
+Każdy feed ma własny token CRON:
 
+```
 https://twojsklep.pl/module/mgxmlfeeds/cron?id=3&token=xxxxxxxxxx
+```
 
+Podgląd XML w przeglądarce:
+```
+https://twojsklep.pl/module/mgxmlfeeds/feed?id=3&token=xxxxxxxxxx
+```
 
-- Uruchomienie tego adresu zleca przebudowę danego pliku XML.
-- Możesz dodać CRON na serwerze, np.:
+Pobranie pliku:
+```
+https://twojsklep.pl/module/mgxmlfeeds/feed?id=3&token=xxxxxxxxxx&download=1
+```
 
-```bash
-wget -q -O /dev/null "https://twojsklep.pl/module/mgxmlfeeds/cron?id=3&token=xxxxxxxxxx"
+---
 
+## 🔧 Przykład struktury XML
 
-Aby uruchomić wszystkie aktywne feedy:
-
-https://twojsklep.pl/module/mgxmlfeeds/cron?all=1&token=MASTER_TOKEN
-
-
-Token główny (MASTER_TOKEN) znajdziesz w konfiguracji modułu.
-
-Podgląd feedu
-
-Feed można podejrzeć w przeglądarce pod adresem:
-
-https://twojsklep.pl/module/mgxmlfeeds/feed?id=3
-
-
-lub pobrać czysty plik XML:
-
-https://twojsklep.pl/module/mgxmlfeeds/feed?id=3&download=1
-
-📄 Przykład struktury XML
-<products generated_at="2025-10-09" shop_id="1" lang="pl" currency="PLN">
-  <product id="1234">
-    <name><![CDATA[Kompresor powietrza]]></name>
-    <description><![CDATA[Profesjonalny kompresor warsztatowy 400V...]]></description>
-    <manufacturer>ABAC</manufacturer>
-    <category>Sprężarki</category>
-    <price_tax_excl>3500.00</price_tax_excl>
-    <price_tax_incl>4305.00</price_tax_incl>
-    <ean13>5901234567890</ean13>
-    <url>https://twojsklep.pl/kompresor-powietrza.html</url>
-    <image>https://twojsklep.pl/img/p/1/2/3/123-large_default.jpg</image>
-    <features>
-      <feature name="Moc">5.5 kW</feature>
-      <feature name="Pojemność zbiornika">270 L</feature>
-    </features>
+```xml
+<products generated_at="2025-10-16" shop_id="1" lang="pl" currency="PLN">
+  <product id="4742">
+    <name><![CDATA[Kompresor tłokowy HDO 50/270/680 bezolejowa]]></name>
+    <product_url>https://twojsklep.pl/pl/4742-kompresor-tlokowy.html</product_url>
   </product>
 </products>
+```
 
-🛠️ Dodatkowe informacje
+---
 
-Pliki XML są automatycznie generowane w katalogu:
+## 🚧 Zadania do dokończenia
 
-/modules/mgxmlfeeds/var/cache/{id_feed}/
+1. **Poprawny zapis JSON-ów** (`filters`, `languages`, `currencies`, `field_map`) do bazy.
+2. **Odtwarzanie zaznaczonych wartości** przy edycji feeda.
+3. **Wizualne generowanie tokenów** i przycisk „Kopiuj” na liście feedów.
+4. **Podgląd feeda i crona** w formularzu edycji.
+5. **Poprawienie JS** w `views/js/admin.js`, aby aktualizował wszystkie pola hidden JSON.
+6. **Testy wielosklepowe i wielojęzykowe.**
+7. **Dodanie edytora mapowania pól (field_map)** – checkbox + alias kolumny.
 
+---
 
-Logi generacji:
+## 🧩 Co działa
 
-/modules/mgxmlfeeds/var/logs/
+✅ Generacja feeda (plik XML + komunikat „Feed built”).  
+✅ Zapis podstawowych pól (`name`, `file_basename`, `token`, `cron_token`).  
+✅ Wyświetlanie listy feedów.  
+✅ Częściowy zapis JSON.  
+✅ Automatyczna obsługa tokenów.  
+✅ Zapis i odczyt nazw plików (`file_basename`).
 
+---
 
-Moduł nie wymaga zewnętrznych bibliotek.
+## 📚 Informacje dla kolejnych deweloperów
 
-Kompatybilny z PrestaShop 8.0 – 9.x.
+- Moduł wymaga dopracowania zapisu i odczytu danych z formularza BO.  
+- Obecnie dane konfiguracyjne są przesyłane jako hidden JSON-y — należy upewnić się, że są z nich składane poprawne wartości w `composeJsonFromPostedUi()`.  
+- Skrypt `admin.js` wymaga aktualizacji, by dynamicznie odświeżał hidden JSON-y.  
+- Dalszy rozwój obejmuje wizualne filtry zamiast pól JSON, obsługę mapowania pól i pełne testy CRON.
 
-📚 Autor i kontakt
+---
 
-Truck-Experts.pl / MG Development
-Rozwiązania diagnostyczne i integracyjne dla PrestaShop
-📧 biuro@truck-experts.pl
+## 🧾 Autor i kontakt
 
+**Truck-Experts.pl / MG Development**  
+Rozwiązania diagnostyczne i integracyjne dla PrestaShop  
+📧 biuro@truck-experts.pl  
 🌐 https://truck-experts.pl
+
+---
+
+© 2025 — Rozwój modułu `mgxmlfeeds`  
+Aktualizacja dokumentacji: **2025-10-16**
